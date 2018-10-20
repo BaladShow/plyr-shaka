@@ -1613,7 +1613,15 @@ typeof navigator === "object" && (function (global, factory) {
         flex.appendChild(badge);
       }
 
-      menuItem.appendChild(flex); // Replicate radio button behaviour
+      menuItem.appendChild(flex); // if(menuItem.getAttribute("data-plyr") == "quality")
+      // {
+      //     menuItem.addEventListener('click', () => {
+      //         this.config.quality.default = menuItem.value;
+      //         controls.updateSetting.call(this, "quality", null, menuItem.value);
+      //         console.log(this.config);
+      //     });
+      // }
+      // Replicate radio button behaviour
 
       Object.defineProperty(menuItem, 'checked', {
         enumerable: true,
@@ -1648,7 +1656,36 @@ typeof navigator === "object" && (function (global, factory) {
             break;
 
           case 'quality':
-            _this2.quality = value;
+            //if the quality is less than the last one then don't reset the buffer
+            if (value == "Auto") {
+              _this2.config.shakaInstance.configure({
+                abr: {
+                  enabled: true
+                }
+              });
+            } else {
+              _this2.config.shakaInstance.configure({
+                abr: {
+                  enabled: false
+                }
+              });
+
+              if (value >= _this2.selectedQuality) {
+                _this2.config.shakaInstance.selectVariantTrack(_this2.config.mpdFiles[_this2.config.qualities.indexOf(value)], true);
+              } else {
+                _this2.config.shakaInstance.selectVariantTrack(_this2.config.mpdFiles[_this2.config.qualities.indexOf(value)], true);
+              }
+            }
+
+            _this2.selectedQuality = value;
+            controls.updateSetting.call(_this2, 'quality', null, value);
+            break;
+
+          case 'audio':
+            _this2.config.shakaInstance.selectAudioLanguage(value);
+
+            _this2.config.audio.selected = value;
+            controls.updateSetting.call(_this2, 'audio', null, value);
             break;
 
           case 'speed':
@@ -1963,6 +2000,10 @@ typeof navigator === "object" && (function (global, factory) {
           return value === 1 ? i18n.get('normal', this.config) : "".concat(value, "&times;");
 
         case 'quality':
+          if (value == "Auto") {
+            return "Auto";
+          }
+
           if (is.number(value)) {
             var label = i18n.get("qualityLabel.".concat(value), this.config);
 
@@ -1974,6 +2015,9 @@ typeof navigator === "object" && (function (global, factory) {
           }
 
           return toTitleCase(value);
+
+        case 'audio':
+          return this.config.audio.selected;
 
         case 'captions':
           return captions.getLabel.call(this);
@@ -1992,7 +2036,7 @@ typeof navigator === "object" && (function (global, factory) {
       }
 
       var type = 'quality';
-      var list = this.elements.settings.panels.quality.querySelector('[role="menu"]'); // Set options if passed and filter based on uniqueness and config
+      var list = this.elements.settings.panels.quality.querySelector('[role="menu"]');
 
       if (is.array(options)) {
         this.options.quality = dedupe(options).filter(function (quality) {
@@ -2038,6 +2082,50 @@ typeof navigator === "object" && (function (global, factory) {
       });
       controls.updateSetting.call(this, type, list);
     },
+    // Set the audio menu
+    setAudioMenu: function setAudioMenu(options) {
+      var _this6 = this;
+
+      // Menu required
+      if (!is.element(this.elements.settings.panels.audio)) {
+        return;
+      }
+
+      var type = 'audio';
+      var list = this.elements.settings.panels.audio.querySelector('[role="menu"]'); // Set options if passed and filter based on uniqueness and config
+
+      if (is.array(options)) {
+        this.options.audio = dedupe(options).filter(function (audio) {
+          return _this6.config.audio.options.includes(audio);
+        });
+      } // Toggle the pane and tab
+
+
+      var toggle = !is.empty(this.options.audio) && this.options.audio.length > 1;
+      controls.toggleMenuButton.call(this, type, toggle); // Empty the menu
+
+      emptyElement(list); // Check if we need to toggle the parent
+
+      controls.checkMenu.call(this); // If we're hiding, nothing more to do
+
+      if (!toggle) {
+        return;
+      } // Sort options by the config and then render options
+
+
+      this.options.audio.sort(function (a, b) {
+        var sorting = _this6.config.audio.options;
+        return sorting.indexOf(a) > sorting.indexOf(b) ? 1 : -1;
+      }).forEach(function (audio) {
+        controls.createMenuItem.call(_this6, {
+          value: audio,
+          list: list,
+          type: type,
+          title: audio
+        });
+      });
+      controls.updateSetting.call(this, type, list, this.config.audio.selected);
+    },
     // Set the looping options
 
     /* setLoopMenu() {
@@ -2078,7 +2166,7 @@ typeof navigator === "object" && (function (global, factory) {
     // TODO: rework this to user the getter in the API?
     // Set a list of available captions languages
     setCaptionsMenu: function setCaptionsMenu() {
-      var _this6 = this;
+      var _this7 = this;
 
       // Menu required
       if (!is.element(this.elements.settings.panels.captions)) {
@@ -2105,9 +2193,9 @@ typeof navigator === "object" && (function (global, factory) {
       var options = tracks.map(function (track, value) {
         return {
           value: value,
-          checked: _this6.captions.toggled && _this6.currentTrack === value,
-          title: captions.getLabel.call(_this6, track),
-          badge: track.language && controls.createBadge.call(_this6, track.language.toUpperCase()),
+          checked: _this7.captions.toggled && _this7.currentTrack === value,
+          title: captions.getLabel.call(_this7, track),
+          badge: track.language && controls.createBadge.call(_this7, track.language.toUpperCase()),
           list: list,
           type: 'language'
         };
@@ -2126,7 +2214,7 @@ typeof navigator === "object" && (function (global, factory) {
     },
     // Set a list of available captions languages
     setSpeedMenu: function setSpeedMenu(options) {
-      var _this7 = this;
+      var _this8 = this;
 
       // Menu required
       if (!is.element(this.elements.settings.panels.speed)) {
@@ -2144,7 +2232,7 @@ typeof navigator === "object" && (function (global, factory) {
 
 
       this.options.speed = this.options.speed.filter(function (speed) {
-        return _this7.config.speed.options.includes(speed);
+        return _this8.config.speed.options.includes(speed);
       }); // Toggle the pane and tab
 
       var toggle = !is.empty(this.options.speed) && this.options.speed.length > 1;
@@ -2160,11 +2248,11 @@ typeof navigator === "object" && (function (global, factory) {
 
 
       this.options.speed.forEach(function (speed) {
-        controls.createMenuItem.call(_this7, {
+        controls.createMenuItem.call(_this8, {
           value: speed,
           list: list,
           type: type,
-          title: controls.getLabel.call(_this7, 'speed', speed)
+          title: controls.getLabel.call(_this8, 'speed', speed)
         });
       });
       controls.updateSetting.call(this, type, list);
@@ -2257,7 +2345,7 @@ typeof navigator === "object" && (function (global, factory) {
     },
     // Show a panel in the menu
     showMenuPanel: function showMenuPanel() {
-      var _this8 = this;
+      var _this9 = this;
 
       var type = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : '';
       var tabFocus = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : false;
@@ -2290,7 +2378,7 @@ typeof navigator === "object" && (function (global, factory) {
           container.style.width = '';
           container.style.height = ''; // Only listen once
 
-          off.call(_this8, container, transitionEndEvent, restore);
+          off.call(_this9, container, transitionEndEvent, restore);
         }; // Listen for the transition finishing and restore auto height/width
 
 
@@ -2310,7 +2398,7 @@ typeof navigator === "object" && (function (global, factory) {
     // Build the default HTML
     // TODO: Set order based on order in the config.controls array?
     create: function create(data) {
-      var _this9 = this;
+      var _this10 = this;
 
       // Create the container
       var container = createElement('div', getAttributesFromSelector(this.config.selectors.controls.wrapper)); // Restart button
@@ -2430,24 +2518,45 @@ typeof navigator === "object" && (function (global, factory) {
 
         this.config.settings.forEach(function (type) {
           // TODO: bundle this with the createMenuItem helper and bindings
-          var menuItem = createElement('button', extend(getAttributesFromSelector(_this9.config.selectors.buttons.settings), {
+          var menuItem = createElement('button', extend(getAttributesFromSelector(_this10.config.selectors.buttons.settings), {
             type: 'button',
-            class: "".concat(_this9.config.classNames.control, " ").concat(_this9.config.classNames.control, "--forward"),
+            class: "".concat(_this10.config.classNames.control, " ").concat(_this10.config.classNames.control, "--forward"),
             role: 'menuitem',
             'aria-haspopup': true,
             hidden: ''
-          })); // Bind menu shortcuts for keyboard users
+          })); // First time seeing player - Tour events assignment
 
-          controls.bindMenuItemShortcuts.call(_this9, menuItem, type); // Show menu on click
+          if (_this10.config.isTouring && type == "quality") menuItem.addEventListener('click', function () {
+            if (_this10.config.tourStep == 0) {
+              _this10.config.tour.next();
+
+              _this10.config.tourStep++;
+            }
+          });
+          if (_this10.config.isTouring && type == "audio") menuItem.addEventListener('click', function () {
+            if (_this10.config.tourStep > 0) {
+              _this10.config.tour.next();
+
+              _this10.config.tourStep++;
+            }
+          }); // Bind menu shortcuts for keyboard users
+
+          controls.bindMenuItemShortcuts.call(_this10, menuItem, type); // Show menu on click
 
           on(menuItem, 'click', function () {
-            controls.showMenuPanel.call(_this9, type, false);
-          });
-          var flex = createElement('span', null, i18n.get(type, _this9.config));
-          var value = createElement('span', {
-            class: _this9.config.classNames.menu.value
-          }); // Speed contains HTML entities
+            controls.showMenuPanel.call(_this10, type, false);
+          }); // Added by baladshow.com
 
+          var flex = createElement('span', null, i18n.get(type, _this10.config));
+
+          if (type == "audio") {
+            flex.innerHTML = "Audio";
+          } // Speed contains HTML entities
+
+
+          var value = createElement('span', {
+            class: _this10.config.classNames.menu.value
+          });
           value.innerHTML = data[type];
           flex.appendChild(value);
           menuItem.appendChild(flex);
@@ -2460,16 +2569,16 @@ typeof navigator === "object" && (function (global, factory) {
 
           var backButton = createElement('button', {
             type: 'button',
-            class: "".concat(_this9.config.classNames.control, " ").concat(_this9.config.classNames.control, "--back")
+            class: "".concat(_this10.config.classNames.control, " ").concat(_this10.config.classNames.control, "--back")
           }); // Visible label
 
           backButton.appendChild(createElement('span', {
             'aria-hidden': true
-          }, i18n.get(type, _this9.config))); // Screen reader label
+          }, type == "audio" ? "Audio" : i18n.get(type, _this10.config))); // Screen reader label
 
           backButton.appendChild(createElement('span', {
-            class: _this9.config.classNames.hidden
-          }, i18n.get('menuBack', _this9.config))); // Go back via keyboard
+            class: _this10.config.classNames.hidden
+          }, i18n.get('menuBack', _this10.config))); // Go back via keyboard
 
           on(pane, 'keydown', function (event) {
             // We only care about <-
@@ -2481,11 +2590,11 @@ typeof navigator === "object" && (function (global, factory) {
             event.preventDefault();
             event.stopPropagation(); // Show the respective menu
 
-            controls.showMenuPanel.call(_this9, 'home', true);
+            controls.showMenuPanel.call(_this10, 'home', true);
           }, false); // Go back via button click
 
           on(backButton, 'click', function () {
-            controls.showMenuPanel.call(_this9, 'home', false);
+            controls.showMenuPanel.call(_this10, 'home', false);
           }); // Add to pane
 
           pane.appendChild(backButton); // Menu
@@ -2494,8 +2603,8 @@ typeof navigator === "object" && (function (global, factory) {
             role: 'menu'
           }));
           inner.appendChild(pane);
-          _this9.elements.settings.buttons[type] = menuItem;
-          _this9.elements.settings.panels[type] = pane;
+          _this10.elements.settings.buttons[type] = menuItem;
+          _this10.elements.settings.panels[type] = pane;
         });
         popup.appendChild(inner);
         control.appendChild(popup);
@@ -2527,15 +2636,26 @@ typeof navigator === "object" && (function (global, factory) {
       this.elements.controls = container; // Set available quality levels
 
       if (this.isHTML5) {
-        controls.setQualityMenu.call(this, html5.getQualityOptions.call(this));
-      }
+        var qualities;
+
+        if (this.config.multipleQualities) {
+          qualities = this.config.qualities;
+        } else {
+          qualities = html5.getQualityOptions.call(this);
+        }
+
+        controls.setQualityMenu.call(this, qualities);
+      } // Set available Audios
+
+
+      controls.setAudioMenu.call(this, this.config.audio.options); //  Speed menu
 
       controls.setSpeedMenu.call(this);
       return container;
     },
     // Insert controls
     inject: function inject() {
-      var _this10 = this;
+      var _this11 = this;
 
       // Sprite
       if (this.config.loadSprite) {
@@ -2577,7 +2697,8 @@ typeof navigator === "object" && (function (global, factory) {
           id: this.id,
           seektime: this.config.seekTime,
           speed: this.speed,
-          quality: this.quality,
+          quality: this.selectedQuality,
+          audio: this.config.audio.selected,
           captions: captions.getLabel.call(this) // TODO: Looping
           // loop: 'None',
 
@@ -2630,7 +2751,7 @@ typeof navigator === "object" && (function (global, factory) {
 
       if (!is.empty(this.elements.buttons)) {
         var addProperty = function addProperty(button) {
-          var className = _this10.config.classNames.controlPressed;
+          var className = _this11.config.classNames.controlPressed;
           Object.defineProperty(button, 'pressed', {
             enumerable: true,
             get: function get() {
@@ -2666,8 +2787,8 @@ typeof navigator === "object" && (function (global, factory) {
         var selector = "".concat(selectors.controls.wrapper, " ").concat(selectors.labels, " .").concat(classNames.hidden);
         var labels = getElements.call(this, selector);
         Array.from(labels).forEach(function (label) {
-          toggleClass(label, _this10.config.classNames.hidden, false);
-          toggleClass(label, _this10.config.classNames.tooltip, true);
+          toggleClass(label, _this11.config.classNames.hidden, false);
+          toggleClass(label, _this11.config.classNames.tooltip, true);
         });
       }
     }
@@ -4336,6 +4457,8 @@ typeof navigator === "object" && (function (global, factory) {
         on.call(player, player.media, 'qualitychange', function (event) {
           // Update UI
           controls.updateSetting.call(player, 'quality', null, event.detail.quality);
+
+          console.log("quality changed");
         }); // Proxy events to container
         // Bubble up key events for Edge
 

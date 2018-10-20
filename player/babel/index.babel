@@ -1,0 +1,20 @@
+document.addEventListener('DOMContentLoaded', () => {
+	const source = 'https://balad.show/api/v1/video/2130/manifest.mpd';
+	const video = document.querySelector('video');
+	// For options (second argument) see: https://github.com/sampotts/plyr/#options
+	const player = new Plyr(video);
+	// Expose player so it can be used from the console
+	window.player = player;
+
+	// For more Shaka Player options, see: https://github.com/google/shaka-player
+	if (shaka.Player.isBrowserSupported()) {
+		// Install built-in polyfills
+		shaka.polyfill.installAll();
+		const shakaInstance = new shaka.Player(video);
+		shakaInstance.load(source).then(()=>{
+			console.log(shakaInstance.getVariantTracks());
+		});
+	} else {
+		console.warn('Browser is not supported!');
+	}
+});

@@ -3,6 +3,10 @@
 // TODO: This needs to be split into smaller files and cleaned up
 // ==========================================================================
 
+//line:434 879
+
+let theQualityList;
+
 import captions from './captions';
 import html5 from './html5';
 import support from './support';
@@ -455,6 +459,15 @@ const controls = {
 
         menuItem.appendChild(flex);
 
+        // if(menuItem.getAttribute("data-plyr") == "quality")
+        // {
+        //     menuItem.addEventListener('click', () => {
+        //         this.config.quality.default = menuItem.value;
+        //         controls.updateSetting.call(this, "quality", null, menuItem.value);
+        //         console.log(this.config);
+        //     });
+        // }
+
         // Replicate radio button behaviour
         Object.defineProperty(menuItem, 'checked', {
             enumerable: true,
@@ -492,7 +505,27 @@ const controls = {
                         break;
 
                     case 'quality':
-                        this.quality = value;
+                        //if the quality is less than the last one then don't reset the buffer
+                        if(value == "Auto"){
+                            this.config.shakaInstance.configure({abr:{enabled: true}});
+                        }
+                        else{
+                            this.config.shakaInstance.configure({abr:{enabled: false}});
+                            if(value >= this.selectedQuality){
+                                this.config.shakaInstance.selectVariantTrack(this.config.mpdFiles[this.config.qualities.indexOf(value)], true);
+                            }
+                            else{
+                                this.config.shakaInstance.selectVariantTrack(this.config.mpdFiles[this.config.qualities.indexOf(value)], true);
+                            }
+                        }
+                        this.selectedQuality = value;
+                        controls.updateSetting.call(this, 'quality', null, value);
+                        break;
+
+                    case 'audio':
+                        this.config.shakaInstance.selectAudioLanguage(value);
+                        this.config.audio.selected = value;
+                        controls.updateSetting.call(this, 'audio', null, value);
                         break;
 
                     case 'speed':
@@ -508,6 +541,8 @@ const controls = {
             type,
             false,
         );
+
+
 
         controls.bindMenuItemShortcuts.call(this, menuItem, type);
 
@@ -781,6 +816,7 @@ const controls = {
 
     // Update the selected setting
     updateSetting(setting, container, input) {
+
         const pane = this.elements.settings.panels[setting];
         let value = null;
         let list = container;
@@ -837,6 +873,9 @@ const controls = {
                 return value === 1 ? i18n.get('normal', this.config) : `${value}&times;`;
 
             case 'quality':
+                if(value == "Auto"){
+                    return "Auto";
+                }
                 if (is.number(value)) {
                     const label = i18n.get(`qualityLabel.${value}`, this.config);
 
@@ -848,6 +887,9 @@ const controls = {
                 }
 
                 return toTitleCase(value);
+
+            case 'audio':
+                return this.config.audio.selected;
 
             case 'captions':
                 return captions.getLabel.call(this);
@@ -866,6 +908,7 @@ const controls = {
 
         const type = 'quality';
         const list = this.elements.settings.panels.quality.querySelector('[role="menu"]');
+        theQualityList = list;
 
         // Set options if passed and filter based on uniqueness and config
         if (is.array(options)) {
@@ -915,6 +958,54 @@ const controls = {
             });
 
         controls.updateSetting.call(this, type, list);
+    },
+
+    // Set the audio menu
+    setAudioMenu(options) {
+        // Menu required
+        if (!is.element(this.elements.settings.panels.audio)) {
+            return;
+        }
+
+        const type = 'audio';
+        const list = this.elements.settings.panels.audio.querySelector('[role="menu"]');
+
+        // Set options if passed and filter based on uniqueness and config
+        if (is.array(options)) {
+            this.options.audio = dedupe(options).filter(audio => this.config.audio.options.includes(audio));
+        }
+
+        // Toggle the pane and tab
+        const toggle = !is.empty(this.options.audio) && this.options.audio.length > 1;
+        controls.toggleMenuButton.call(this, type, toggle);
+
+        // Empty the menu
+        emptyElement(list);
+
+        // Check if we need to toggle the parent
+        controls.checkMenu.call(this);
+
+        // If we're hiding, nothing more to do
+        if (!toggle) {
+            return;
+        }
+
+        // Sort options by the config and then render options
+        this.options.audio
+            .sort((a, b) => {
+                const sorting = this.config.audio.options;
+                return sorting.indexOf(a) > sorting.indexOf(b) ? 1 : -1;
+            })
+            .forEach(audio => {
+                controls.createMenuItem.call(this, {
+                    value: audio,
+                    list,
+                    type,
+                    title: audio,
+                });
+            });
+
+        controls.updateSetting.call(this, type, list, this.config.audio.selected);
     },
 
     // Set the looping options
@@ -1372,9 +1463,29 @@ const controls = {
                         class: `${this.config.classNames.control} ${this.config.classNames.control}--forward`,
                         role: 'menuitem',
                         'aria-haspopup': true,
-                        hidden: '',
+                        hidden: ''
                     }),
                 );
+
+                // First time seeing player - Tour events assignment
+
+                if(this.config.isTouring && type == "quality")
+                menuItem.addEventListener('click', () => {
+                    if(this.config.tourStep == 0)
+                    {
+                        this.config.tour.next();
+                        this.config.tourStep ++;
+                    }
+                });
+
+                if(this.config.isTouring && type == "audio")
+                menuItem.addEventListener('click', () => {
+                    if(this.config.tourStep > 0)
+                    {
+                        this.config.tour.next();
+                        this.config.tourStep ++;
+                    }
+                });
 
                 // Bind menu shortcuts for keyboard users
                 controls.bindMenuItemShortcuts.call(this, menuItem, type);
@@ -1384,16 +1495,19 @@ const controls = {
                     controls.showMenuPanel.call(this, type, false);
                 });
 
-                const flex = createElement('span', null, i18n.get(type, this.config));
+                // Added by baladshow.com
+                let flex = createElement('span', null, i18n.get(type, this.config));
 
-                const value = createElement('span', {
-                    class: this.config.classNames.menu.value,
-                });
-
+                if(type == "audio"){
+                    flex.innerHTML = "Audio";
+                }
+                
                 // Speed contains HTML entities
+                const value = createElement('span', {
+                    class: this.config.classNames.menu.value
+                });
                 value.innerHTML = data[type];
-
-                flex.appendChild(value);
+                flex.appendChild(value);                
                 menuItem.appendChild(flex);
                 menu.appendChild(menuItem);
 
@@ -1416,7 +1530,7 @@ const controls = {
                         {
                             'aria-hidden': true,
                         },
-                        i18n.get(type, this.config),
+                        type == "audio" ? "Audio" : i18n.get(type, this.config)
                     ),
                 );
 
@@ -1504,9 +1618,20 @@ const controls = {
 
         // Set available quality levels
         if (this.isHTML5) {
-            controls.setQualityMenu.call(this, html5.getQualityOptions.call(this));
+            let qualities;
+            if(this.config.multipleQualities){
+                qualities = this.config.qualities;
+            }
+            else{
+                qualities = html5.getQualityOptions.call(this);
+            }
+            controls.setQualityMenu.call(this, qualities);
         }
 
+        // Set available Audios
+        controls.setAudioMenu.call(this, this.config.audio.options);
+
+        //  Speed menu
         controls.setSpeedMenu.call(this);
 
         return container;
@@ -1558,7 +1683,8 @@ const controls = {
                 id: this.id,
                 seektime: this.config.seekTime,
                 speed: this.speed,
-                quality: this.quality,
+                quality: this.selectedQuality,
+                audio:this.config.audio.selected,
                 captions: captions.getLabel.call(this),
                 // TODO: Looping
                 // loop: 'None',

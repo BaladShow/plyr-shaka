@@ -429,6 +429,7 @@ class Listeners {
         on.call(player, player.media, 'qualitychange', event => {
             // Update UI
             controls.updateSetting.call(player, 'quality', null, event.detail.quality);
+            console.log("quality changed");
         });
 
         // Proxy events to container
