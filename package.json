@@ -1,8 +1,8 @@
 {
-    "name": "plyr",
+    "name": "@baladshow/plyr-shaka",
     "version": "3.4.4",
     "description": "A simple, accessible and customizable HTML5, YouTube and Vimeo media player",
-    "homepage": "https://plyr.io",
+    "homepage": "https://github.com/baladshow/plyr-shaka",
     "author": "Sam Potts <sam@potts.es>",
     "keywords": [
         "HTML5 Video",
@@ -20,10 +20,10 @@
     "license": "MIT",
     "repository": {
         "type": "git",
-        "url": "git://github.com/sampotts/plyr.git"
+        "url": "git://github.com/baladshow/plyr-shaka"
     },
     "bugs": {
-        "url": "https://github.com/sampotts/plyr/issues"
+        "url": "https://github.com/baladshow/plyr-shaka/issues"
     },
     "directories": {
         "doc": "readme.md"
