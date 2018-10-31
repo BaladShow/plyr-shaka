@@ -1480,7 +1480,7 @@ typeof navigator === "object" && (function (global, factory) {
         // Set @@toStringTag to native iterators
         _setToStringTag(IteratorPrototype, TAG, true);
         // fix for some old engines
-        if (typeof IteratorPrototype[ITERATOR$3] != 'function') _hide(IteratorPrototype, ITERATOR$3, returnThis);
+        if (!_library && typeof IteratorPrototype[ITERATOR$3] != 'function') _hide(IteratorPrototype, ITERATOR$3, returnThis);
       }
     }
     // fix Array#{values, @@iterator}.name in V8 / FF
@@ -1489,7 +1489,7 @@ typeof navigator === "object" && (function (global, factory) {
       $default = function values() { return $native.call(this); };
     }
     // Define iterator
-    if (BUGGY || VALUES_BUG || !proto[ITERATOR$3]) {
+    if ((!_library || FORCED) && (BUGGY || VALUES_BUG || !proto[ITERATOR$3])) {
       _hide(proto, ITERATOR$3, $default);
     }
     // Plug for library
@@ -2650,7 +2650,7 @@ typeof navigator === "object" && (function (global, factory) {
       return capability.promise;
     }
   });
-  _export(_export.S + _export.F * (!USE_NATIVE), PROMISE, {
+  _export(_export.S + _export.F * (_library || !USE_NATIVE), PROMISE, {
     // 25.4.4.6 Promise.resolve(x)
     resolve: function resolve(x) {
       return _promiseResolve(_library && this === Wrapper ? $Promise : this, x);
@@ -3190,15 +3190,12 @@ typeof navigator === "object" && (function (global, factory) {
   } // Element matches selector
 
   function matches(element, selector) {
-    var prototype = {
-      Element: Element
-    };
 
     function match() {
       return Array.from(document.querySelectorAll(selector)).includes(this);
     }
 
-    var matches = prototype.matches || prototype.webkitMatchesSelector || prototype.mozMatchesSelector || prototype.msMatchesSelector || match;
+    var matches = match;
     return matches.call(element, selector);
   } // Find all elements
 
@@ -7437,9 +7434,7 @@ typeof navigator === "object" && (function (global, factory) {
 
   var loadjs_umd = createCommonjsModule(function (module, exports) {
   (function(root, factory) {
-    if (typeof undefined === 'function' && undefined.amd) {
-      undefined([], factory);
-    } else {
+    {
       module.exports = factory();
     }
   }(commonjsGlobal, function() {
