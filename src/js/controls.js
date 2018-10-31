@@ -7,6 +7,8 @@
 
 let theQualityList;
 
+let SpeedList = [0.5, 1, 2];
+
 import captions from './captions';
 import html5 from './html5';
 import support from './support';
@@ -435,118 +437,127 @@ const controls = {
 
     // Create a settings menu item
     createMenuItem({ value, list, type, title, badge = null, checked = false }) {
-        const attributes = getAttributesFromSelector(this.config.selectors.inputs[type]);
+        if(type != 'speed' || SpeedList.includes(value))
+        {
+            const attributes = getAttributesFromSelector(this.config.selectors.inputs[type]);
 
-        const menuItem = createElement(
-            'button',
-            extend(attributes, {
-                type: 'button',
-                role: 'menuitemradio',
-                class: `${this.config.classNames.control} ${attributes.class ? attributes.class : ''}`.trim(),
-                'aria-checked': checked,
-                value,
-            }),
-        );
+            const menuItem = createElement(
+                'button',
+                extend(attributes, {
+                    type: 'button',
+                    role: 'menuitemradio',
+                    class: `${this.config.classNames.control} ${attributes.class ? attributes.class : ''}`.trim(),
+                    'aria-checked': checked,
+                    value,
+                }),
+            );
 
-        const flex = createElement('span');
+            const flex = createElement('span');
 
-        // We have to set as HTML incase of special characters
-        flex.innerHTML = title;
+            // We have to set as HTML incase of special characters
+            flex.innerHTML = title;
 
-        if (is.element(badge)) {
-            flex.appendChild(badge);
-        }
+            if (is.element(badge)) {
+                flex.appendChild(badge);
+            }
 
-        menuItem.appendChild(flex);
+            menuItem.appendChild(flex);
 
-        // if(menuItem.getAttribute("data-plyr") == "quality")
-        // {
-        //     menuItem.addEventListener('click', () => {
-        //         this.config.quality.default = menuItem.value;
-        //         controls.updateSetting.call(this, "quality", null, menuItem.value);
-        //         console.log(this.config);
-        //     });
-        // }
+            // if(menuItem.getAttribute("data-plyr") == "quality")
+            // {
+            //     menuItem.addEventListener('click', () => {
+            //         this.config.quality.default = menuItem.value;
+            //         controls.updateSetting.call(this, "quality", null, menuItem.value);
+            //         console.log(this.config);
+            //     });
+            // }
 
-        // Replicate radio button behaviour
-        Object.defineProperty(menuItem, 'checked', {
-            enumerable: true,
-            get() {
-                return menuItem.getAttribute('aria-checked') === 'true';
-            },
-            set(checked) {
-                // Ensure exclusivity
-                if (checked) {
-                    Array.from(menuItem.parentNode.children)
-                        .filter(node => matches(node, '[role="menuitemradio"]'))
-                        .forEach(node => node.setAttribute('aria-checked', 'false'));
-                }
+            // Replicate radio button behaviour
+            Object.defineProperty(menuItem, 'checked', {
+                enumerable: true,
+                get() {
+                    return menuItem.getAttribute('aria-checked') === 'true';
+                },
+                set(checked) {
+                    // Ensure exclusivity
+                    if (checked) {
+                        Array.from(menuItem.parentNode.children)
+                            .filter(node => matches(node, '[role="menuitemradio"]'))
+                            .forEach(node => node.setAttribute('aria-checked', 'false'));
+                    }
 
-                menuItem.setAttribute('aria-checked', checked ? 'true' : 'false');
-            },
-        });
+                    menuItem.setAttribute('aria-checked', checked ? 'true' : 'false');
+                },
+            });
 
-        this.listeners.bind(
-            menuItem,
-            'click keyup',
-            event => {
-                if (is.keyboardEvent(event) && event.which !== 32) {
-                    return;
-                }
+            this.listeners.bind(
+                menuItem,
+                'click keyup',
+                event => {
+                    if (is.keyboardEvent(event) && event.which !== 32) {
+                        return;
+                    }
 
-                event.preventDefault();
-                event.stopPropagation();
+                    event.preventDefault();
+                    event.stopPropagation();
 
-                menuItem.checked = true;
+                    menuItem.checked = true;
 
-                switch (type) {
-                    case 'language':
-                        this.currentTrack = Number(value);
-                        break;
+                    switch (type) {
+                        case 'language':
+                            this.currentTrack = Number(value);
+                            break;
 
-                    case 'quality':
-                        //if the quality is less than the last one then don't reset the buffer
-                        if(value == "Auto"){
-                            this.config.shakaInstance.configure({abr:{enabled: true}});
-                        }
-                        else{
-                            this.config.shakaInstance.configure({abr:{enabled: false}});
-                            if(value >= this.selectedQuality){
-                                this.config.shakaInstance.selectVariantTrack(this.config.mpdFiles[this.config.qualities.indexOf(value)], true);
+                        case 'quality':
+                            //if the quality is less than the last one then don't reset the buffer
+                            if(value == "Auto"){
+                                this.config.shakaInstance.configure({abr:{enabled: true}});
                             }
                             else{
-                                this.config.shakaInstance.selectVariantTrack(this.config.mpdFiles[this.config.qualities.indexOf(value)], true);
+                                this.config.shakaInstance.configure({abr:{enabled: false}});
+                                if(value >= this.selectedQuality){
+                                    this.config.shakaInstance.selectVariantTrack(this.config.mpdFiles[this.config.qualities.indexOf(value)], true);
+                                    if(this.config.audio.selected){
+                                        this.config.shakaInstance.selectAudioLanguage(this.config.audio.selected);
+                                    }
+                                }
+                                else{
+                                    this.config.shakaInstance.selectVariantTrack(this.config.mpdFiles[this.config.qualities.indexOf(value)], true);
+                                    if(this.config.audio.selected){
+                                        this.config.shakaInstance.selectAudioLanguage(this.config.audio.selected);
+                                    }
+                                }
                             }
-                        }
-                        this.selectedQuality = value;
-                        controls.updateSetting.call(this, 'quality', null, value);
-                        break;
+                            this.selectedQuality = value;
+                            controls.updateSetting.call(this, 'quality', null, value);
+                            break;
 
-                    case 'audio':
-                        this.config.shakaInstance.selectAudioLanguage(value);
-                        this.config.audio.selected = value;
-                        controls.updateSetting.call(this, 'audio', null, value);
-                        break;
+                        case 'audio':
+                            this.config.shakaInstance.selectAudioLanguage(value);
+                            this.config.audio.selected = value;
+                            controls.updateSetting.call(this, 'audio', null, value);
+                            break;
 
-                    case 'speed':
-                        this.speed = parseFloat(value);
-                        break;
+                        case 'speed':
+                            this.speed = parseFloat(value);
+                            break;
 
-                    default:
-                        break;
-                }
+                        default:
+                            break;
+                    }
 
-                controls.showMenuPanel.call(this, 'home', is.keyboardEvent(event));
-            },
-            type,
-            false,
-        );
-
+                    controls.showMenuPanel.call(this, 'home', is.keyboardEvent(event));
+                },
+                type,
+                false,
+            );
 
 
-        controls.bindMenuItemShortcuts.call(this, menuItem, type);
 
-        list.appendChild(menuItem);
+            controls.bindMenuItemShortcuts.call(this, menuItem, type);
+
+            list.appendChild(menuItem);
+        }
     },
 
     // Format a time for display
@@ -1419,6 +1430,7 @@ const controls = {
 
         // Settings button / menu
         if (this.config.controls.includes('settings') && !is.empty(this.config.settings)) {
+
             const control = createElement('div', {
                 class: 'plyr__menu',
                 hidden: '',
@@ -1466,26 +1478,6 @@ const controls = {
                         hidden: ''
                     }),
                 );
-
-                // First time seeing player - Tour events assignment
-
-                if(this.config.isTouring && type == "quality")
-                menuItem.addEventListener('click', () => {
-                    if(this.config.tourStep == 0)
-                    {
-                        this.config.tour.next();
-                        this.config.tourStep ++;
-                    }
-                });
-
-                if(this.config.isTouring && type == "audio")
-                menuItem.addEventListener('click', () => {
-                    if(this.config.tourStep > 0)
-                    {
-                        this.config.tour.next();
-                        this.config.tourStep ++;
-                    }
-                });
 
                 // Bind menu shortcuts for keyboard users
                 controls.bindMenuItemShortcuts.call(this, menuItem, type);
