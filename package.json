@@ -1,5 +1,5 @@
 {
-    "name": "plyr",
+    "name": "@baladshow/plyr-shaka",
     "version": "4.4.7",
     "description": "A simple, accessible and customizable HTML5, YouTube and Vimeo media player",
     "homepage": "https://github.com/baladshow/plyr-shaka",
