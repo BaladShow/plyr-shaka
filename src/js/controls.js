@@ -117,9 +117,10 @@ const controls = {
         // https://developer.mozilla.org/en-US/docs/Web/SVG/Attribute/xlink:href
         if ('href' in use) {
             use.setAttributeNS('http://www.w3.org/1999/xlink', 'href', path);
-        } else {
-            use.setAttributeNS('http://www.w3.org/1999/xlink', 'xlink:href', path);
         }
+
+        // Always set the older attribute even though it's "deprecated" (it'll be around for ages)
+        use.setAttributeNS('http://www.w3.org/1999/xlink', 'xlink:href', path);
 
         // Add <use> to <svg>
         icon.appendChild(use);
@@ -128,17 +129,13 @@ const controls = {
     },
 
     // Create hidden text label
-    createLabel(type, attr = {}) {
-        // Skip i18n for abbreviations and brand names
-        const universals = {
-            pip: 'PIP',
-            airplay: 'AirPlay',
-        };
-        const text = universals[type] || i18n.get(type, this.config);
+    createLabel(key, attr = {}) {
+        const text = i18n.get(key, this.config);
 
         const attributes = Object.assign({}, attr, {
             class: [attr.class, this.config.classNames.hidden].filter(Boolean).join(' '),
         });
+
         return createElement('span', attributes, text);
     },
 
@@ -167,21 +164,32 @@ const controls = {
 
     // Create a <button>
     createButton(buttonType, attr) {
-        const button = createElement('button');
         const attributes = Object.assign({}, attr);
         let type = toCamelCase(buttonType);
 
-        let toggle = false;
-        let label;
-        let icon;
-        let labelPressed;
-        let iconPressed;
+        const props = {
+            element: 'button',
+            toggle: false,
+            label: null,
+            icon: null,
+            labelPressed: null,
+            iconPressed: null,
+        };
 
-        if (!('type' in attributes)) {
+        ['element', 'icon', 'label'].forEach(key => {
+            if (Object.keys(attributes).includes(key)) {
+                props[key] = attributes[key];
+                delete attributes[key];
+            }
+        });
+
+        // Default to 'button' type to prevent form submission
+        if (props.element === 'button' && !Object.keys(attributes).includes('type')) {
             attributes.type = 'button';
         }
 
-        if ('class' in attributes) {
+        // Set class name
+        if (Object.keys(attributes).includes('class')) {
             if (!attributes.class.includes(this.config.classNames.control)) {
                 attributes.class += ` ${this.config.classNames.control}`;
             }
@@ -192,82 +200,87 @@ const controls = {
         // Large play button
         switch (buttonType) {
             case 'play':
-                toggle = true;
-                label = 'play';
-                labelPressed = 'pause';
-                icon = 'play';
-                iconPressed = 'pause';
+                props.toggle = true;
+                props.label = 'play';
+                props.labelPressed = 'pause';
+                props.icon = 'play';
+                props.iconPressed = 'pause';
                 break;
 
             case 'mute':
-                toggle = true;
-                label = 'mute';
-                labelPressed = 'unmute';
-                icon = 'volume';
-                iconPressed = 'muted';
+                props.toggle = true;
+                props.label = 'mute';
+                props.labelPressed = 'unmute';
+                props.icon = 'volume';
+                props.iconPressed = 'muted';
                 break;
 
             case 'captions':
-                toggle = true;
-                label = 'enableCaptions';
-                labelPressed = 'disableCaptions';
-                icon = 'captions-off';
-                iconPressed = 'captions-on';
+                props.toggle = true;
+                props.label = 'enableCaptions';
+                props.labelPressed = 'disableCaptions';
+                props.icon = 'captions-off';
+                props.iconPressed = 'captions-on';
                 break;
 
             case 'fullscreen':
-                toggle = true;
-                label = 'enterFullscreen';
-                labelPressed = 'exitFullscreen';
-                icon = 'enter-fullscreen';
-                iconPressed = 'exit-fullscreen';
+                props.toggle = true;
+                props.label = 'enterFullscreen';
+                props.labelPressed = 'exitFullscreen';
+                props.icon = 'enter-fullscreen';
+                props.iconPressed = 'exit-fullscreen';
                 break;
 
             case 'play-large':
                 attributes.class += ` ${this.config.classNames.control}--overlaid`;
                 type = 'play';
-                label = 'play';
-                icon = 'play';
+                props.label = 'play';
+                props.icon = 'play';
                 break;
 
             default:
-                label = type;
-                icon = buttonType;
+                if (is.empty(props.label)) {
+                    props.label = type;
+                }
+                if (is.empty(props.icon)) {
+                    props.icon = buttonType;
+                }
         }
 
+        const button = createElement(props.element);
+
         // Setup toggle icon and labels
-        if (toggle) {
+        if (props.toggle) {
             // Icon
             button.appendChild(
-                controls.createIcon.call(this, iconPressed, {
+                controls.createIcon.call(this, props.iconPressed, {
                     class: 'icon--pressed',
                 }),
             );
             button.appendChild(
-                controls.createIcon.call(this, icon, {
+                controls.createIcon.call(this, props.icon, {
                     class: 'icon--not-pressed',
                 }),
             );
 
             // Label/Tooltip
             button.appendChild(
-                controls.createLabel.call(this, labelPressed, {
+                controls.createLabel.call(this, props.labelPressed, {
                     class: 'label--pressed',
                 }),
             );
             button.appendChild(
-                controls.createLabel.call(this, label, {
+                controls.createLabel.call(this, props.label, {
                     class: 'label--not-pressed',
                 }),
             );
         } else {
-            button.appendChild(controls.createIcon.call(this, icon));
-            button.appendChild(controls.createLabel.call(this, label));
+            button.appendChild(controls.createIcon.call(this, props.icon));
+            button.appendChild(controls.createLabel.call(this, props.label));
         }
 
-        // Merge attributes
+        // Merge and set attributes
         extend(attributes, getAttributesFromSelector(this.config.selectors.buttons[type], attributes));
-
         setAttributes(button, attributes);
 
         // We have multiple play buttons
@@ -1316,6 +1329,19 @@ const controls = {
         controls.focusFirstMenuItem.call(this, target, tabFocus);
     },
 
+    // Set the download link
+    setDownloadLink() {
+        const button = this.elements.buttons.download;
+
+        // Bail if no button
+        if (!is.element(button)) {
+            return;
+        }
+
+        // Set download link
+        button.setAttribute('href', this.download);
+    },
+
     // Build the default HTML
     // TODO: Set order based on order in the config.controls array?
     create(data) {
@@ -1596,6 +1622,26 @@ const controls = {
             container.appendChild(controls.createButton.call(this, 'airplay'));
         }
 
+        // Download button
+        if (this.config.controls.includes('download')) {
+            const attributes = {
+                element: 'a',
+                href: this.download,
+                target: '_blank',
+            };
+
+            const { download } = this.config.urls;
+
+            if (!is.url(download) && this.isEmbed) {
+                extend(attributes, {
+                    icon: `logo-${this.provider}`,
+                    label: this.provider,
+                });
+            }
+
+            container.appendChild(controls.createButton.call(this, 'download', attributes));
+        }
+
         // Toggle fullscreen button
         if (this.config.controls.includes('fullscreen')) {
             container.appendChild(controls.createButton.call(this, 'fullscreen'));
@@ -1658,7 +1704,7 @@ const controls = {
 
         // If function, run it and use output
         if (is.function(this.config.controls)) {
-            this.config.controls = this.config.controls.call(this.props);
+            this.config.controls = this.config.controls.call(this, props);
         }
 
         // Convert falsy controls to empty array (primarily for empty strings)

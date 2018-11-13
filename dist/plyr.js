@@ -178,6 +178,11 @@ typeof navigator === "object" && (function (global, factory) {
     // Accept a URL object
     if (instanceOf(input, window.URL)) {
       return true;
+    } // Must be string from here
+
+
+    if (!isString(input)) {
+      return false;
     } // Add the protocol if required
 
 
@@ -626,7 +631,9 @@ typeof navigator === "object" && (function (global, factory) {
     } // Set regular focus
 
 
-    element.focus(); // If we want to mimic keyboard focus via tab
+    element.focus({
+      preventScroll: true
+    }); // If we want to mimic keyboard focus via tab
 
     if (tabFocus) {
       toggleClass(element, this.config.classNames.tabFocus);
@@ -697,9 +704,25 @@ typeof navigator === "object" && (function (global, factory) {
       };
     },
     // Picture-in-picture support
-    // Safari only currently
+    // Safari & Chrome only currently
     pip: function () {
-      return !browser.isIPhone && is.function(createElement('video').webkitSetPresentationMode);
+      if (browser.isIPhone) {
+        return false;
+      } // Safari
+      // https://developer.apple.com/documentation/webkitjs/adding_picture_in_picture_to_your_safari_media_controls
+
+
+      if (is.function(createElement('video').webkitSetPresentationMode)) {
+        return true;
+      } // Chrome
+      // https://developers.google.com/web/updates/2018/10/watch-video-using-picture-in-picture
+
+
+      if (document.pictureInPictureEnabled && !createElement('video').disablePictureInPicture) {
+        return true;
+      }
+
+      return false;
     }(),
     // Airplay support
     // Safari only currently
@@ -715,26 +738,20 @@ typeof navigator === "object" && (function (global, factory) {
           _inputType$split2 = _slicedToArray(_inputType$split, 1),
           mediaType = _inputType$split2[0];
 
+      var type = inputType; // Verify we're using HTML5 and there's no media type mismatch
+
       if (!this.isHTML5 || mediaType !== this.type) {
         return false;
-      }
+      } // Add codec if required
 
-      var type;
 
-      if (inputType && inputType.includes('codecs=')) {
-        // Use input directly
-        type = inputType;
-      } else if (inputType === 'audio/mpeg') {
-        // Skip codec
-        type = 'audio/mpeg;';
-      } else if (inputType in defaultCodecs) {
-        // Use codec
-        type = "".concat(inputType, "; codecs=\"").concat(defaultCodecs[inputType], "\"");
+      if (Object.keys(defaultCodecs).includes(type)) {
+        type += "; codecs=\"".concat(defaultCodecs[inputType], "\"");
       }
 
       try {
         return Boolean(type && this.media.canPlayType(type).replace(/no/, ''));
-      } catch (err) {
+      } catch (e) {
         return false;
       }
     },
@@ -831,10 +848,6 @@ typeof navigator === "object" && (function (global, factory) {
 
 
           triggerEvent.call(player, player.media, 'qualitychange', false, {
-            quality: input
-          }); // Save to storage
-
-          player.storage.set({
             quality: input
           });
         }
@@ -1003,6 +1016,13 @@ typeof navigator === "object" && (function (global, factory) {
     return wrapper.innerHTML;
   }
 
+  var resources = {
+    pip: 'PIP',
+    airplay: 'AirPlay',
+    html5: 'HTML5',
+    vimeo: 'Vimeo',
+    youtube: 'YouTube'
+  };
   var i18n = {
     get: function get() {
       var key = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : '';
@@ -1015,6 +1035,10 @@ typeof navigator === "object" && (function (global, factory) {
       var string = getDeep(config.i18n, key);
 
       if (is.empty(string)) {
+        if (Object.keys(resources).includes(key)) {
+          return resources[key];
+        }
+
         return '';
       }
 
@@ -1329,23 +1353,18 @@ typeof navigator === "object" && (function (global, factory) {
 
       if ('href' in use) {
         use.setAttributeNS('http://www.w3.org/1999/xlink', 'href', path);
-      } else {
-        use.setAttributeNS('http://www.w3.org/1999/xlink', 'xlink:href', path);
-      } // Add <use> to <svg>
+      } // Always set the older attribute even though it's "deprecated" (it'll be around for ages)
 
+
+      use.setAttributeNS('http://www.w3.org/1999/xlink', 'xlink:href', path); // Add <use> to <svg>
 
       icon.appendChild(use);
       return icon;
     },
     // Create hidden text label
-    createLabel: function createLabel(type) {
+    createLabel: function createLabel(key) {
       var attr = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : {};
-      // Skip i18n for abbreviations and brand names
-      var universals = {
-        pip: 'PIP',
-        airplay: 'AirPlay'
-      };
-      var text = universals[type] || i18n.get(type, this.config);
+      var text = i18n.get(key, this.config);
       var attributes = Object.assign({}, attr, {
         class: [attr.class, this.config.classNames.hidden].filter(Boolean).join(' ')
       });
@@ -1367,20 +1386,29 @@ typeof navigator === "object" && (function (global, factory) {
     },
     // Create a <button>
     createButton: function createButton(buttonType, attr) {
-      var button = createElement('button');
       var attributes = Object.assign({}, attr);
       var type = toCamelCase(buttonType);
-      var toggle = false;
-      var label;
-      var icon;
-      var labelPressed;
-      var iconPressed;
+      var props = {
+        element: 'button',
+        toggle: false,
+        label: null,
+        icon: null,
+        labelPressed: null,
+        iconPressed: null
+      };
+      ['element', 'icon', 'label'].forEach(function (key) {
+        if (Object.keys(attributes).includes(key)) {
+          props[key] = attributes[key];
+          delete attributes[key];
+        }
+      }); // Default to 'button' type to prevent form submission
 
-      if (!('type' in attributes)) {
+      if (props.element === 'button' && !Object.keys(attributes).includes('type')) {
         attributes.type = 'button';
-      }
+      } // Set class name
 
-      if ('class' in attributes) {
+
+      if (Object.keys(attributes).includes('class')) {
         if (!attributes.class.includes(this.config.classNames.control)) {
           attributes.class += " ".concat(this.config.classNames.control);
         }
@@ -1391,69 +1419,76 @@ typeof navigator === "object" && (function (global, factory) {
 
       switch (buttonType) {
         case 'play':
-          toggle = true;
-          label = 'play';
-          labelPressed = 'pause';
-          icon = 'play';
-          iconPressed = 'pause';
+          props.toggle = true;
+          props.label = 'play';
+          props.labelPressed = 'pause';
+          props.icon = 'play';
+          props.iconPressed = 'pause';
           break;
 
         case 'mute':
-          toggle = true;
-          label = 'mute';
-          labelPressed = 'unmute';
-          icon = 'volume';
-          iconPressed = 'muted';
+          props.toggle = true;
+          props.label = 'mute';
+          props.labelPressed = 'unmute';
+          props.icon = 'volume';
+          props.iconPressed = 'muted';
           break;
 
         case 'captions':
-          toggle = true;
-          label = 'enableCaptions';
-          labelPressed = 'disableCaptions';
-          icon = 'captions-off';
-          iconPressed = 'captions-on';
+          props.toggle = true;
+          props.label = 'enableCaptions';
+          props.labelPressed = 'disableCaptions';
+          props.icon = 'captions-off';
+          props.iconPressed = 'captions-on';
           break;
 
         case 'fullscreen':
-          toggle = true;
-          label = 'enterFullscreen';
-          labelPressed = 'exitFullscreen';
-          icon = 'enter-fullscreen';
-          iconPressed = 'exit-fullscreen';
+          props.toggle = true;
+          props.label = 'enterFullscreen';
+          props.labelPressed = 'exitFullscreen';
+          props.icon = 'enter-fullscreen';
+          props.iconPressed = 'exit-fullscreen';
           break;
 
         case 'play-large':
           attributes.class += " ".concat(this.config.classNames.control, "--overlaid");
           type = 'play';
-          label = 'play';
-          icon = 'play';
+          props.label = 'play';
+          props.icon = 'play';
           break;
 
         default:
-          label = type;
-          icon = buttonType;
-      } // Setup toggle icon and labels
+          if (is.empty(props.label)) {
+            props.label = type;
+          }
 
+          if (is.empty(props.icon)) {
+            props.icon = buttonType;
+          }
 
-      if (toggle) {
+      }
+
+      var button = createElement(props.element); // Setup toggle icon and labels
+
+      if (props.toggle) {
         // Icon
-        button.appendChild(controls.createIcon.call(this, iconPressed, {
+        button.appendChild(controls.createIcon.call(this, props.iconPressed, {
           class: 'icon--pressed'
         }));
-        button.appendChild(controls.createIcon.call(this, icon, {
+        button.appendChild(controls.createIcon.call(this, props.icon, {
           class: 'icon--not-pressed'
         })); // Label/Tooltip
 
-        button.appendChild(controls.createLabel.call(this, labelPressed, {
+        button.appendChild(controls.createLabel.call(this, props.labelPressed, {
           class: 'label--pressed'
         }));
-        button.appendChild(controls.createLabel.call(this, label, {
+        button.appendChild(controls.createLabel.call(this, props.label, {
           class: 'label--not-pressed'
         }));
       } else {
-        button.appendChild(controls.createIcon.call(this, icon));
-        button.appendChild(controls.createLabel.call(this, label));
-      } // Merge attributes
+        button.appendChild(controls.createIcon.call(this, props.icon));
+        button.appendChild(controls.createLabel.call(this, props.label));
+      } // Merge and set attributes
 
 
       extend(attributes, getAttributesFromSelector(this.config.selectors.buttons[type], attributes));
@@ -2405,6 +2440,17 @@ typeof navigator === "object" && (function (global, factory) {
 
       controls.focusFirstMenuItem.call(this, target, tabFocus);
     },
+    // Set the download link
+    setDownloadLink: function setDownloadLink() {
+      var button = this.elements.buttons.download; // Bail if no button
+
+      if (!is.element(button)) {
+        return;
+      } // Set download link
+
+
+      button.setAttribute('href', this.download);
+    },
     // Build the default HTML
     // TODO: Set order based on order in the config.controls array?
     create: function create(data) {
@@ -2616,6 +2662,25 @@ typeof navigator === "object" && (function (global, factory) {
 
       if (this.config.controls.includes('airplay') && support.airplay) {
         container.appendChild(controls.createButton.call(this, 'airplay'));
+      } // Download button
+
+
+      if (this.config.controls.includes('download')) {
+        var _attributes = {
+          element: 'a',
+          href: this.download,
+          target: '_blank'
+        };
+        var download = this.config.urls.download;
+
+        if (!is.url(download) && this.isEmbed) {
+          extend(_attributes, {
+            icon: "logo-".concat(this.provider),
+            label: this.provider
+          });
+        }
+
+        container.appendChild(controls.createButton.call(this, 'download', _attributes));
       } // Toggle fullscreen button
 
 
@@ -2675,7 +2740,7 @@ typeof navigator === "object" && (function (global, factory) {
       var update = true; // If function, run it and use output
 
       if (is.function(this.config.controls)) {
-        this.config.controls = this.config.controls.call(this.props);
+        this.config.controls = this.config.controls.call(this, props);
       } // Convert falsy controls to empty array (primarily for empty strings)
 
 
@@ -3239,7 +3304,7 @@ typeof navigator === "object" && (function (global, factory) {
     // Sprite (for icons)
     loadSprite: true,
     iconPrefix: 'plyr',
-    iconUrl: 'https://cdn.plyr.io/3.3.12/plyr.svg',
+    iconUrl: 'https://cdn.plyr.io/3.4.7/plyr.svg',
     // Blank video (used to prevent errors on source change)
     blankVideo: 'https://cdn.plyr.io/static/blank.mp4',
     // Quality default
@@ -3294,7 +3359,8 @@ typeof navigator === "object" && (function (global, factory) {
     controls: ['play-large', // 'restart',
     // 'rewind',
     'play', // 'fast-forward',
-    'progress', 'current-time', 'mute', 'volume', 'captions', 'settings', 'pip', 'airplay', 'fullscreen'],
+    'progress', 'current-time', 'mute', 'volume', 'captions', 'settings', 'pip', 'airplay', // 'download',
+    'fullscreen'],
     settings: ['captions', 'quality', 'speed'],
     // Localisation
     i18n: {
@@ -3314,6 +3380,7 @@ typeof navigator === "object" && (function (global, factory) {
       unmute: 'Unmute',
       enableCaptions: 'Enable captions',
       disableCaptions: 'Disable captions',
+      download: 'Download',
       enterFullscreen: 'Enter fullscreen',
       exitFullscreen: 'Exit fullscreen',
       frameTitle: 'Player for {title}',
@@ -3342,6 +3409,7 @@ typeof navigator === "object" && (function (global, factory) {
     },
     // URLs
     urls: {
+      download: null,
       vimeo: {
         sdk: 'https://player.vimeo.com/api/player.js',
         iframe: 'https://player.vimeo.com/video/{0}?{1}',
@@ -3366,6 +3434,7 @@ typeof navigator === "object" && (function (global, factory) {
       mute: null,
       volume: null,
       captions: null,
+      download: null,
       fullscreen: null,
       pip: null,
       airplay: null,
@@ -3378,7 +3447,7 @@ typeof navigator === "object" && (function (global, factory) {
     events: [// Events to watch on HTML5 media elements and bubble
     // https://developer.mozilla.org/en/docs/Web/Guide/Events/Media_events
     'ended', 'progress', 'stalled', 'playing', 'waiting', 'canplay', 'canplaythrough', 'loadstart', 'loadeddata', 'loadedmetadata', 'timeupdate', 'volumechange', 'play', 'pause', 'error', 'seeking', 'seeked', 'emptied', 'ratechange', 'cuechange', // Custom events
-    'enterfullscreen', 'exitfullscreen', 'captionsenabled', 'captionsdisabled', 'languagechange', 'controlshidden', 'controlsshown', 'ready', // YouTube
+    'download', 'enterfullscreen', 'exitfullscreen', 'captionsenabled', 'captionsdisabled', 'languagechange', 'controlshidden', 'controlsshown', 'ready', // YouTube
     'statechange', // Quality
     'qualitychange', // Ads
     'adsloaded', 'adscontentpause', 'adscontentresume', 'adstarted', 'adsmidpoint', 'adscomplete', 'adsallcomplete', 'adsimpression', 'adsclick'],
@@ -3400,6 +3469,7 @@ typeof navigator === "object" && (function (global, factory) {
         fastForward: '[data-plyr="fast-forward"]',
         mute: '[data-plyr="mute"]',
         captions: '[data-plyr="captions"]',
+        download: '[data-plyr="download"]',
         fullscreen: '[data-plyr="fullscreen"]',
         pip: '[data-plyr="pip"]',
         airplay: '[data-plyr="airplay"]',
@@ -3499,6 +3569,14 @@ typeof navigator === "object" && (function (global, factory) {
   };
 
   // ==========================================================================
+  // Plyr states
+  // ==========================================================================
+  var pip = {
+    active: 'picture-in-picture',
+    inactive: 'inline'
+  };
+
+  // ==========================================================================
   // Plyr supported types and providers
   // ==========================================================================
   var providers = {
@@ -3512,7 +3590,7 @@ typeof navigator === "object" && (function (global, factory) {
   };
   /**
    * Get provider by URL
-   * @param {string} url
+   * @param {String} url
    */
 
   function getProviderByUrl(url) {
@@ -4039,8 +4117,10 @@ typeof navigator === "object" && (function (global, factory) {
       var controls$$1 = this.elements.controls;
 
       if (controls$$1 && this.config.hideControls) {
-        // Show controls if force, loading, paused, or button interaction, otherwise hide
-        this.toggleControls(Boolean(force || this.loading || this.paused || controls$$1.pressed || controls$$1.hover));
+        // Don't hide controls if a touch-device user recently seeked. (Must be limited to touch devices, or it occasionally prevents desktop controls from hiding.)
+        var recentTouchSeek = this.touch && this.lastSeekTime + 2000 > Date.now(); // Show controls if force, loading, paused, button interaction, or recent seek, otherwise hide
+
+        this.toggleControls(Boolean(force || this.loading || this.paused || controls$$1.pressed || controls$$1.hover || recentTouchSeek));
       }
     }
   };
@@ -4347,7 +4427,7 @@ typeof navigator === "object" && (function (global, factory) {
         }); // Check for audio tracks on load
         // We can't use `loadedmetadata` as it doesn't seem to have audio tracks at that point
 
-        on.call(player, player.media, 'canplay', function () {
+        on.call(player, player.media, 'canplay loadeddata', function () {
           toggleHidden(elements.volume, !player.hasAudio);
           toggleHidden(elements.buttons.mute, !player.hasAudio);
         }); // Handle the media finishing
@@ -4399,7 +4479,7 @@ typeof navigator === "object" && (function (global, factory) {
 
           if (!is.element(wrapper)) {
             return;
-          } // On click play, pause ore restart
+          } // On click play, pause or restart
 
 
           on.call(player, elements.container, 'click', function (event) {
@@ -4454,6 +4534,10 @@ typeof navigator === "object" && (function (global, factory) {
           controls.updateSetting.call(player, 'quality', null, event.detail.quality);
 
           console.log("quality changed");
+        }); // Update download link when ready and if quality changes
+
+        on.call(player, player.media, 'ready qualitychange', function () {
+          controls.setDownloadLink.call(player);
         }); // Proxy events to container
         // Bubble up key events for Edge
 
@@ -4531,7 +4615,11 @@ typeof navigator === "object" && (function (global, factory) {
 
         this.bind(elements.buttons.captions, 'click', function () {
           return player.toggleCaptions();
-        }); // Fullscreen toggle
+        }); // Download
+
+        this.bind(elements.buttons.download, 'click', function () {
+          triggerEvent.call(player, player.media, 'download');
+        }, 'download'); // Fullscreen toggle
 
         this.bind(elements.buttons.fullscreen, 'click', function () {
           player.fullscreen.toggle();
@@ -4594,8 +4682,10 @@ typeof navigator === "object" && (function (global, factory) {
 
           if (is.keyboardEvent(event) && code !== 39 && code !== 37) {
             return;
-          } // Was playing before?
+          } // Record seek time so we can prevent hiding controls for a few seconds after seek
 
+
+          player.lastSeekTime = Date.now(); // Was playing before?
 
           var play = seek.hasAttribute(attribute); // Done seeking
 
@@ -4673,32 +4763,28 @@ typeof navigator === "object" && (function (global, factory) {
 
         this.bind(elements.controls, 'mousedown mouseup touchstart touchend touchcancel', function (event) {
           elements.controls.pressed = ['mousedown', 'touchstart'].includes(event.type);
-        }); // Focus in/out on controls
+        }); // Show controls when they receive focus (e.g., when using keyboard tab key)
 
-        this.bind(elements.controls, 'focusin focusout', function (event) {
+        this.bind(elements.controls, 'focusin', function () {
           var config = player.config,
               elements = player.elements,
-              timers = player.timers;
-          var isFocusIn = event.type === 'focusin'; // Skip transition to prevent focus from scrolling the parent element
+              timers = player.timers; // Skip transition to prevent focus from scrolling the parent element
 
-          toggleClass(elements.controls, config.classNames.noTransition, isFocusIn); // Toggle
+          toggleClass(elements.controls, config.classNames.noTransition, true); // Toggle
 
-          ui.toggleControls.call(player, isFocusIn); // If focusin, hide again after delay
+          ui.toggleControls.call(player, true); // Restore transition
 
-          if (isFocusIn) {
-            // Restore transition
-            setTimeout(function () {
-              toggleClass(elements.controls, config.classNames.noTransition, false);
-            }, 0); // Delay a little more for keyboard users
+          setTimeout(function () {
+            toggleClass(elements.controls, config.classNames.noTransition, false);
+          }, 0); // Delay a little more for mouse users
 
-            var delay = _this2.touch ? 3000 : 4000; // Clear timer
+          var delay = _this2.touch ? 3000 : 4000; // Clear timer
 
-            clearTimeout(timers.controls); // Hide
+          clearTimeout(timers.controls); // Hide again after delay
 
-            timers.controls = setTimeout(function () {
-              return ui.toggleControls.call(player, false);
-            }, delay);
-          }
+          timers.controls = setTimeout(function () {
+            return ui.toggleControls.call(player, false);
+          }, delay);
         }); // Mouse wheel for volume
 
         this.bind(elements.inputs.volume, 'wheel', function (event) {
@@ -5095,12 +5181,13 @@ typeof navigator === "object" && (function (global, factory) {
     // Set aspect ratio
     // For Vimeo we have an extra 300% height <div> to hide the standard controls and UI
     setAspectRatio: function setAspectRatio(input) {
-      var _split = (is.string(input) ? input : this.config.ratio).split(':'),
-          _split2 = _slicedToArray(_split, 2),
-          x = _split2[0],
-          y = _split2[1];
+      var _split$map = (is.string(input) ? input : this.config.ratio).split(':').map(Number),
+          _split$map2 = _slicedToArray(_split$map, 2),
+          x = _split$map2[0],
+          y = _split$map2[1];
 
       var padding = 100 / x * y;
+      vimeo.padding = padding;
       this.elements.wrapper.style.paddingBottom = "".concat(padding, "%");
 
       if (this.supported.ui) {
@@ -5287,6 +5374,7 @@ typeof navigator === "object" && (function (global, factory) {
       var currentSrc;
       player.embed.getVideoUrl().then(function (value) {
         currentSrc = value;
+        controls.setDownloadLink.call(player);
       }).catch(function (error) {
         _this2.debug.warn(error);
       });
@@ -5303,8 +5391,8 @@ typeof navigator === "object" && (function (global, factory) {
       }); // Set aspect ratio based on video size
 
       Promise.all([player.embed.getVideoWidth(), player.embed.getVideoHeight()]).then(function (dimensions) {
-        var ratio = getAspectRatio(dimensions[0], dimensions[1]);
-        vimeo.setAspectRatio.call(_this2, ratio);
+        vimeo.ratio = getAspectRatio(dimensions[0], dimensions[1]);
+        vimeo.setAspectRatio.call(_this2, vimeo.ratio);
       }); // Set autopause
 
       player.embed.setAutopause(player.config.autopause).then(function (state) {
@@ -5395,6 +5483,24 @@ typeof navigator === "object" && (function (global, factory) {
       player.embed.on('error', function (detail) {
         player.media.error = detail;
         triggerEvent.call(player, player.media, 'error');
+      }); // Set height/width on fullscreen
+
+      player.on('enterfullscreen exitfullscreen', function (event) {
+        var target = player.fullscreen.target; // Ignore for iOS native
+
+        if (target !== player.elements.container) {
+          return;
+        }
+
+        var toggle = event.type === 'enterfullscreen';
+
+        var _vimeo$ratio$split$ma = vimeo.ratio.split(':').map(Number),
+            _vimeo$ratio$split$ma2 = _slicedToArray(_vimeo$ratio$split$ma, 2),
+            x = _vimeo$ratio$split$ma2[0],
+            y = _vimeo$ratio$split$ma2[1];
+
+        var dimension = x > y ? 'width' : 'height';
+        target.style[dimension] = toggle ? "".concat(vimeo.padding, "%") : null;
       }); // Rebuild UI
 
       setTimeout(function () {
@@ -6572,18 +6678,20 @@ typeof navigator === "object" && (function (global, factory) {
 
         if (_this2.isHTML5) {
           // Setup captions
-          if ('tracks' in input) {
+          if (Object.keys(input).includes('tracks')) {
             source.insertElements.call(_this2, 'track', input.tracks);
-          } // Load HTML5 sources
-
-
-          _this2.media.load();
+          }
         } // If HTML5 or embed but not fully supported, setupInterface and call ready now
 
 
         if (_this2.isHTML5 || _this2.isEmbed && !_this2.supported.ui) {
           // Setup interface
           ui.build.call(_this2);
+        }
+
+        if (_this2.isHTML5) {
+          // Load HTML5 sources
+          _this2.media.load();
         } // Update the fullscreen support
 
 
@@ -6840,7 +6948,10 @@ typeof navigator === "object" && (function (global, factory) {
 
       if (this.config.autoplay) {
         this.play();
-      }
+      } // Seek time will be recorded (in listeners.js) so we can prevent hiding controls for a few seconds after seek
+
+
+      this.lastSeekTime = 0;
     } // ---------------------------------------
     // API
     // ---------------------------------------
@@ -7471,17 +7582,26 @@ typeof navigator === "object" && (function (global, factory) {
         }
 
         var quality = [!is.empty(input) && Number(input), this.storage.get('quality'), config.selected, config.default].find(is.number);
+        var updateStorage = true;
 
         if (!options.includes(quality)) {
           var value = closest(options, quality);
           this.debug.warn("Unsupported quality option: ".concat(quality, ", using ").concat(value, " instead"));
-          quality = value;
+          quality = value; // Don't update storage if quality is not supported
+
+          updateStorage = false;
         } // Update config
 
 
         config.selected = quality; // Set quality
 
-        this.media.quality = quality;
+        this.media.quality = quality; // Save to storage
+
+        if (updateStorage) {
+          this.storage.set({
+            quality: quality
+          });
+        }
       }
       /**
        * Get current quality level
@@ -7563,6 +7683,16 @@ typeof navigator === "object" && (function (global, factory) {
       ,
       get: function get() {
         return this.media.currentSrc;
+      }
+      /**
+       * Get a download URL (either source or custom)
+       */
+
+    }, {
+      key: "download",
+      get: function get() {
+        var download = this.config.urls.download;
+        return is.url(download) ? download : this.source;
       }
       /**
        * Set the poster image for a video
@@ -7650,19 +7780,27 @@ typeof navigator === "object" && (function (global, factory) {
     }, {
       key: "pip",
       set: function set(input) {
-        var states = {
-          pip: 'picture-in-picture',
-          inline: 'inline'
-        }; // Bail if no support
-
+        // Bail if no support
         if (!support.pip) {
           return;
         } // Toggle based on current state if not passed
 
 
-        var toggle = is.boolean(input) ? input : this.pip === states.inline; // Toggle based on current state
+        var toggle = is.boolean(input) ? input : !this.pip; // Toggle based on current state
+        // Safari
 
-        this.media.webkitSetPresentationMode(toggle ? states.pip : states.inline);
+        if (is.function(this.media.webkitSetPresentationMode)) {
+          this.media.webkitSetPresentationMode(toggle ? pip.active : pip.inactive);
+        } // Chrome
+
+
+        if (is.function(this.media.requestPictureInPicture)) {
+          if (!this.pip && toggle) {
+            this.media.requestPictureInPicture();
+          } else if (this.pip && !toggle) {
+            document.exitPictureInPicture();
+          }
+        }
       }
       /**
        * Get the current picture-in-picture state
@@ -7671,9 +7809,15 @@ typeof navigator === "object" && (function (global, factory) {
       get: function get() {
         if (!support.pip) {
           return null;
-        }
+        } // Safari
 
-        return this.media.webkitPresentationMode;
+
+        if (!is.empty(this.media.webkitPresentationMode)) {
+          return this.media.webkitPresentationMode === pip.active;
+        } // Chrome
+
+
+        return this.media === document.pictureInPictureElement;
       }
     }], [{
       key: "supported",

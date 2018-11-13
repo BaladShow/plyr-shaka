@@ -36,8 +36,26 @@ const support = {
     },
 
     // Picture-in-picture support
-    // Safari only currently
-    pip: (() => !browser.isIPhone && is.function(createElement('video').webkitSetPresentationMode))(),
+    // Safari & Chrome only currently
+    pip: (() => {
+        if (browser.isIPhone) {
+            return false;
+        }
+
+        // Safari
+        // https://developer.apple.com/documentation/webkitjs/adding_picture_in_picture_to_your_safari_media_controls
+        if (is.function(createElement('video').webkitSetPresentationMode)) {
+            return true;
+        }
+
+        // Chrome
+        // https://developers.google.com/web/updates/2018/10/watch-video-using-picture-in-picture
+        if (document.pictureInPictureEnabled && !createElement('video').disablePictureInPicture) {
+            return true;
+        }
+
+        return false;
+    })(),
 
     // Airplay support
     // Safari only currently
@@ -52,25 +70,21 @@ const support = {
     // Related: http://www.leanbackplayer.com/test/h5mt.html
     mime(inputType) {
         const [mediaType] = inputType.split('/');
+        let type = inputType;
+
+        // Verify we're using HTML5 and there's no media type mismatch
         if (!this.isHTML5 || mediaType !== this.type) {
             return false;
         }
 
-        let type;
-        if (inputType && inputType.includes('codecs=')) {
-            // Use input directly
-            type = inputType;
-        } else if (inputType === 'audio/mpeg') {
-            // Skip codec
-            type = 'audio/mpeg;';
-        } else if (inputType in defaultCodecs) {
-            // Use codec
-            type = `${inputType}; codecs="${defaultCodecs[inputType]}"`;
+        // Add codec if required
+        if (Object.keys(defaultCodecs).includes(type)) {
+            type += `; codecs="${defaultCodecs[inputType]}"`;
         }
 
         try {
             return Boolean(type && this.media.canPlayType(type).replace(/no/, ''));
-        } catch (err) {
+        } catch (e) {
             return false;
         }
     },
