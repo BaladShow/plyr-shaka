@@ -3,19 +3,27 @@
 // TODO: This needs to be split into smaller files and cleaned up
 // ==========================================================================
 
-//line:434 879
-
-let theQualityList;
-
-let SpeedList = [0.5, 1, 2];
-
+import RangeTouch from 'rangetouch';
 import captions from './captions';
 import html5 from './html5';
 import support from './support';
 import { repaint, transitionEndEvent } from './utils/animation';
 import { dedupe } from './utils/arrays';
 import browser from './utils/browser';
-import { createElement, emptyElement, getAttributesFromSelector, getElement, getElements, hasClass, matches, removeElement, setAttributes, setFocus, toggleClass, toggleHidden } from './utils/elements';
+import {
+    createElement,
+    emptyElement,
+    getAttributesFromSelector,
+    getElement,
+    getElements,
+    hasClass,
+    matches,
+    removeElement,
+    setAttributes,
+    setFocus,
+    toggleClass,
+    toggleHidden,
+} from './utils/elements';
 import { off, on } from './utils/events';
 import i18n from './utils/i18n';
 import is from './utils/is';
@@ -327,6 +335,9 @@ const controls = {
         // Set the fill for webkit now
         controls.updateRangeFill.call(this, input);
 
+        // Improve support on touch devices
+        RangeTouch.setup(input);
+
         return input;
     },
 
@@ -340,7 +351,7 @@ const controls = {
                     min: 0,
                     max: 100,
                     value: 0,
-                    role: 'presentation',
+                    role: 'progressbar',
                     'aria-hidden': true,
                 },
                 attributes,
@@ -450,8 +461,6 @@ const controls = {
 
     // Create a settings menu item
     createMenuItem({ value, list, type, title, badge = null, checked = false }) {
-        if(type != 'speed' || SpeedList.includes(value))
-        {
             const attributes = getAttributesFromSelector(this.config.selectors.inputs[type]);
 
             const menuItem = createElement(
@@ -570,7 +579,6 @@ const controls = {
             controls.bindMenuItemShortcuts.call(this, menuItem, type);
 
             list.appendChild(menuItem);
-        }
     },
 
     // Format a time for display
@@ -713,7 +721,7 @@ const controls = {
         }
 
         // Set CSS custom property
-        range.style.setProperty('--value', `${range.value / range.max * 100}%`);
+        range.style.setProperty('--value', `${(range.value / range.max) * 100}%`);
     },
 
     // Update hover tooltip for seeking
@@ -745,7 +753,7 @@ const controls = {
 
         // Determine percentage, if already visible
         if (is.event(event)) {
-            percent = 100 / clientRect.width * (event.pageX - clientRect.left);
+            percent = (100 / clientRect.width) * (event.pageX - clientRect.left);
         } else if (hasClass(this.elements.display.seekTooltip, visible)) {
             percent = parseFloat(this.elements.display.seekTooltip.style.left, 10);
         } else {
@@ -760,7 +768,7 @@ const controls = {
         }
 
         // Display the time a click would seek to
-        controls.updateTimeDisplay.call(this, this.elements.display.seekTooltip, this.duration / 100 * percent);
+        controls.updateTimeDisplay.call(this, this.elements.display.seekTooltip, (this.duration / 100) * percent);
 
         // Set position
         this.elements.display.seekTooltip.style.left = `${percent}%`;
@@ -932,7 +940,6 @@ const controls = {
 
         const type = 'quality';
         const list = this.elements.settings.panels.quality.querySelector('[role="menu"]');
-        theQualityList = list;
 
         // Set options if passed and filter based on uniqueness and config
         if (is.array(options)) {
@@ -1519,13 +1526,13 @@ const controls = {
                 if(type == "audio"){
                     flex.innerHTML = "Audio";
                 }
-                
+
                 // Speed contains HTML entities
                 const value = createElement('span', {
                     class: this.config.classNames.menu.value
                 });
                 value.innerHTML = data[type];
-                flex.appendChild(value);                
+                flex.appendChild(value);
                 menuItem.appendChild(flex);
                 menu.appendChild(menuItem);
 
@@ -1792,15 +1799,17 @@ const controls = {
                 .filter(Boolean)
                 .forEach(button => {
                     if (is.array(button) || is.nodeList(button)) {
-                        Array.from(button).filter(Boolean).forEach(addProperty);
+                        Array.from(button)
+                            .filter(Boolean)
+                            .forEach(addProperty);
                     } else {
                         addProperty(button);
                     }
                 });
         }
 
-        // Edge sometimes doesn't finish the paint so force a redraw
-        if (window.navigator.userAgent.includes('Edge')) {
+        // Edge sometimes doesn't finish the paint so force a repaint
+        if (browser.isEdge) {
             repaint(target);
         }
 

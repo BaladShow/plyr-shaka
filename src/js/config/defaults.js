@@ -42,8 +42,9 @@ const defaults = {
     // Clicking the currentTime inverts it's value to show time left rather than elapsed
     toggleInvert: true,
 
-    // Aspect ratio (for embeds)
-    ratio: '16:9',
+    // Force an aspect ratio
+    // The format must be `'w:h'` (e.g. `'16:9'`)
+    ratio: null,
 
     // Click video container to play/pause
     clickToPlay: true,
@@ -60,7 +61,7 @@ const defaults = {
     // Sprite (for icons)
     loadSprite: true,
     iconPrefix: 'plyr',
-    iconUrl: 'https://cdn.plyr.io/3.4.7/plyr.svg',
+    iconUrl: 'https://cdn.plyr.io/3.5.3/plyr.svg',
 
     // Blank video (used to prevent errors on source change)
     blankVideo: 'https://cdn.plyr.io/static/blank.mp4',
@@ -108,7 +109,7 @@ const defaults = {
     // Fullscreen settings
     fullscreen: {
         enabled: true, // Allow fullscreen?
-        fallback: true, // Fallback for vintage browsers
+        fallback: true, // Fallback using full viewport/window
         iosNative: false, // Use the native fullscreen in iOS (disables custom controls)
     },
 
@@ -330,6 +331,7 @@ const defaults = {
         provider: 'plyr--{0}',
         video: 'plyr__video-wrapper',
         embed: 'plyr__video-embed',
+        videoFixedRatio: 'plyr__video-wrapper--fixed-ratio',
         embedContainer: 'plyr__video-embed__container',
         poster: 'plyr__poster',
         posterEnabled: 'plyr__poster-enabled',
@@ -374,6 +376,16 @@ const defaults = {
             active: 'plyr--airplay-active',
         },
         tabFocus: 'plyr__tab-focus',
+        previewThumbnails: {
+            // Tooltip thumbs
+            thumbContainer: 'plyr__preview-thumb',
+            thumbContainerShown: 'plyr__preview-thumb--is-shown',
+            imageContainer: 'plyr__preview-thumb__image-container',
+            timeContainer: 'plyr__preview-thumb__time-container',
+            // Scrubbing
+            scrubbingContainer: 'plyr__preview-scrubbing',
+            scrubbingContainerShown: 'plyr__preview-scrubbing--is-shown',
+        },
     },
 
     // Embed attributes
@@ -394,6 +406,31 @@ const defaults = {
     ads: {
         enabled: false,
         publisherId: '',
+        tagUrl: '',
+    },
+
+    // Preview Thumbnails plugin
+    previewThumbnails: {
+        enabled: false,
+        src: '',
+    },
+
+    // Vimeo plugin
+    vimeo: {
+        byline: false,
+        portrait: false,
+        title: false,
+        speed: true,
+        transparent: false,
+    },
+
+    // YouTube plugin
+    youtube: {
+        noCookie: false, // Whether to use an alternative version of YouTube without cookies
+        rel: 0, // No related vids
+        showinfo: 0, // Hide info
+        iv_load_policy: 3, // Hide annotations
+        modestbranding: 1, // Hide logos as much as possible (they still show one in the corner when paused)
     },
 };
 

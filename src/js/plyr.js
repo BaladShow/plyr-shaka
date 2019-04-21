@@ -1,6 +1,6 @@
 // ==========================================================================
 // Plyr
-// plyr.js v3.4.7
+// plyr.js v3.5.3
 // https://github.com/sampotts/plyr
 // License: The MIT License (MIT)
 // ==========================================================================
@@ -15,6 +15,7 @@ import Fullscreen from './fullscreen';
 import Listeners from './listeners';
 import media from './media';
 import Ads from './plugins/ads';
+import PreviewThumbnails from './plugins/previewThumbnails';
 import source from './source';
 import Storage from './storage';
 import support from './support';
@@ -25,6 +26,7 @@ import { off, on, once, triggerEvent, unbindListeners } from './utils/events';
 import is from './utils/is';
 import loadSprite from './utils/loadSprite';
 import { cloneDeep, extend } from './utils/objects';
+import { getAspectRatio, reduceAspectRatio, setAspectRatio, validateRatio } from './utils/style';
 import { parseUrl } from './utils/urls';
 
 // Private properties
@@ -187,7 +189,7 @@ class Plyr {
                         // YouTube requires the playsinline in the URL
                         if (this.isYouTube) {
                             this.config.playsinline = truthy.includes(url.searchParams.get('playsinline'));
-                            this.config.hl = url.searchParams.get('hl'); // TODO: Should this be setting language?
+                            this.config.youtube.hl = url.searchParams.get('hl'); // TODO: Should this be setting language?
                         } else {
                             this.config.playsinline = true;
                         }
@@ -262,7 +264,7 @@ class Plyr {
 
         // Wrap media
         if (!is.element(this.elements.container)) {
-            this.elements.container = createElement('div');
+            this.elements.container = createElement('div', { tabindex: 0 });
             wrap(this.media, this.elements.container);
         }
 
@@ -300,12 +302,17 @@ class Plyr {
         }
 
         // Autoplay if required
-        if (this.config.autoplay) {
-            this.play();
+        if (this.isHTML5 && this.config.autoplay) {
+            setTimeout(() => this.play(), 10);
         }
 
         // Seek time will be recorded (in listeners.js) so we can prevent hiding controls for a few seconds after seek
         this.lastSeekTime = 0;
+
+        // Setup preview thumbnails if enabled
+        if (this.config.previewThumbnails.enabled) {
+            this.previewThumbnails = new PreviewThumbnails(this);
+        }
     }
 
     // ---------------------------------------
@@ -345,6 +352,11 @@ class Plyr {
     play() {
         if (!is.function(this.media.play)) {
             return null;
+        }
+
+        // Intecept play with ads
+        if (this.ads && this.ads.enabled) {
+            this.ads.managerPromise.then(() => this.ads.play()).catch(() => this.media.play());
         }
 
         // Return the promise (for HTML5)
@@ -392,7 +404,7 @@ class Plyr {
 
     /**
      * Toggle playback based on current status
-     * @param {boolean} input
+     * @param {Boolean} input
      */
     togglePlay(input) {
         // Toggle based on current state if nothing passed
@@ -426,7 +438,7 @@ class Plyr {
 
     /**
      * Rewind
-     * @param {number} seekTime - how far to rewind in seconds. Defaults to the config.seekTime
+     * @param {Number} seekTime - how far to rewind in seconds. Defaults to the config.seekTime
      */
     rewind(seekTime) {
         this.currentTime = this.currentTime - (is.number(seekTime) ? seekTime : this.config.seekTime);
@@ -434,7 +446,7 @@ class Plyr {
 
     /**
      * Fast forward
-     * @param {number} seekTime - how far to fast forward in seconds. Defaults to the config.seekTime
+     * @param {Number} seekTime - how far to fast forward in seconds. Defaults to the config.seekTime
      */
     forward(seekTime) {
         this.currentTime = this.currentTime + (is.number(seekTime) ? seekTime : this.config.seekTime);
@@ -442,7 +454,7 @@ class Plyr {
 
     /**
      * Seek to a time
-     * @param {number} input - where to seek to in seconds. Defaults to 0 (the start)
+     * @param {Number} input - where to seek to in seconds. Defaults to 0 (the start)
      */
     set currentTime(input) {
         // Bail if media duration isn't available yet
@@ -512,7 +524,7 @@ class Plyr {
 
     /**
      * Set the player volume
-     * @param {number} value - must be between 0 and 1. Defaults to the value from local storage and config.volume if not set in storage
+     * @param {Number} value - must be between 0 and 1. Defaults to the value from local storage and config.volume if not set in storage
      */
     set volume(value) {
         let volume = value;
@@ -563,7 +575,7 @@ class Plyr {
 
     /**
      * Increase volume
-     * @param {boolean} step - How much to decrease by (between 0 and 1)
+     * @param {Boolean} step - How much to decrease by (between 0 and 1)
      */
     increaseVolume(step) {
         const volume = this.media.muted ? 0 : this.volume;
@@ -572,7 +584,7 @@ class Plyr {
 
     /**
      * Decrease volume
-     * @param {boolean} step - How much to decrease by (between 0 and 1)
+     * @param {Boolean} step - How much to decrease by (between 0 and 1)
      */
     decreaseVolume(step) {
         this.increaseVolume(-step);
@@ -580,7 +592,7 @@ class Plyr {
 
     /**
      * Set muted state
-     * @param {boolean} mute
+     * @param {Boolean} mute
      */
     set muted(mute) {
         let toggle = mute;
@@ -632,7 +644,7 @@ class Plyr {
 
     /**
      * Set playback speed
-     * @param {number} speed - the speed of playback (0.5-2.0)
+     * @param {Number} speed - the speed of playback (0.5-2.0)
      */
     set speed(input) {
         let speed = null;
@@ -679,7 +691,7 @@ class Plyr {
     /**
      * Set playback quality
      * Currently HTML5 & YouTube only
-     * @param {number} input - Quality level
+     * @param {Number} input - Quality level
      */
     set quality(input) {
         const config = this.config.quality;
@@ -729,7 +741,7 @@ class Plyr {
     /**
      * Toggle loop
      * TODO: Finish fancy new logic. Set the indicator on load as user may pass loop as config
-     * @param {boolean} input - Whether to loop or not
+     * @param {Boolean} input - Whether to loop or not
      */
     set loop(input) {
         const toggle = is.boolean(input) ? input : this.config.loop.active;
@@ -789,7 +801,7 @@ class Plyr {
 
     /**
      * Set new media source
-     * @param {object} input - The new source object (see docs)
+     * @param {Object} input - The new source object (see docs)
      */
     set source(input) {
         source.change.call(this, input);
@@ -813,7 +825,7 @@ class Plyr {
 
     /**
      * Set the poster image for a video
-     * @param {input} - the URL for the new poster image
+     * @param {String} input - the URL for the new poster image
      */
     set poster(input) {
         if (!this.isVideo) {
@@ -836,8 +848,36 @@ class Plyr {
     }
 
     /**
+     * Get the current aspect ratio in use
+     */
+    get ratio() {
+        const ratio = reduceAspectRatio(getAspectRatio.call(this));
+
+        return is.array(ratio) ? ratio.join(':') : ratio;
+    }
+
+    /**
+     * Set video aspect ratio
+     */
+    set ratio(input) {
+        if (!this.isVideo) {
+            this.debug.warn('Aspect ratio can only be set for video');
+            return;
+        }
+
+        if (!is.string(input) || !validateRatio(input)) {
+            this.debug.error(`Invalid aspect ratio specified (${input})`);
+            return;
+        }
+
+        this.config.ratio = input;
+
+        setAspectRatio.call(this);
+    }
+
+    /**
      * Set the autoplay state
-     * @param {boolean} input - Whether to autoplay or not
+     * @param {Boolean} input - Whether to autoplay or not
      */
     set autoplay(input) {
         const toggle = is.boolean(input) ? input : this.config.autoplay;
@@ -853,7 +893,7 @@ class Plyr {
 
     /**
      * Toggle captions
-     * @param {boolean} input - Whether to enable captions
+     * @param {Boolean} input - Whether to enable captions
      */
     toggleCaptions(input) {
         captions.toggle.call(this, input, false);
@@ -861,7 +901,7 @@ class Plyr {
 
     /**
      * Set the caption track by index
-     * @param {number} - Caption index
+     * @param {Number} - Caption index
      */
     set currentTrack(input) {
         captions.set.call(this, input, false);
@@ -878,7 +918,7 @@ class Plyr {
     /**
      * Set the wanted language for captions
      * Since tracks can be added later it won't update the actual caption track until there is a matching track
-     * @param {string} - Two character ISO language code (e.g. EN, FR, PT, etc)
+     * @param {String} - Two character ISO language code (e.g. EN, FR, PT, etc)
      */
     set language(input) {
         captions.setLanguage.call(this, input, false);
@@ -951,7 +991,7 @@ class Plyr {
 
     /**
      * Toggle the player controls
-     * @param {boolean} [toggle] - Whether to show the controls
+     * @param {Boolean} [toggle] - Whether to show the controls
      */
     toggleControls(toggle) {
         // Don't toggle if missing UI support or if it's audio
@@ -984,8 +1024,8 @@ class Plyr {
 
     /**
      * Add event listeners
-     * @param {string} event - Event type
-     * @param {function} callback - Callback for when event occurs
+     * @param {String} event - Event type
+     * @param {Function} callback - Callback for when event occurs
      */
     on(event, callback) {
         on.call(this, this.elements.container, event, callback);
@@ -993,8 +1033,8 @@ class Plyr {
 
     /**
      * Add event listeners once
-     * @param {string} event - Event type
-     * @param {function} callback - Callback for when event occurs
+     * @param {String} event - Event type
+     * @param {Function} callback - Callback for when event occurs
      */
     once(event, callback) {
         once.call(this, this.elements.container, event, callback);
@@ -1002,8 +1042,8 @@ class Plyr {
 
     /**
      * Remove event listeners
-     * @param {string} event - Event type
-     * @param {function} callback - Callback for when event occurs
+     * @param {String} event - Event type
+     * @param {Function} callback - Callback for when event occurs
      */
     off(event, callback) {
         off(this.elements.container, event, callback);
@@ -1013,8 +1053,8 @@ class Plyr {
      * Destroy an instance
      * Event listeners are removed when elements are removed
      * http://stackoverflow.com/questions/12528049/if-a-dom-element-is-removed-are-its-listeners-also-removed-from-memory
-     * @param {function} callback - Callback for when destroy is complete
-     * @param {boolean} soft - Whether it's a soft destroy (for source changes etc)
+     * @param {Function} callback - Callback for when destroy is complete
+     * @param {Boolean} soft - Whether it's a soft destroy (for source changes etc)
      */
     destroy(callback, soft = false) {
         if (!this.ready) {
@@ -1077,11 +1117,13 @@ class Plyr {
         // Stop playback
         this.stop();
 
+        // Clear timeouts
+        clearTimeout(this.timers.loading);
+        clearTimeout(this.timers.controls);
+        clearTimeout(this.timers.resized);
+
         // Provider specific stuff
         if (this.isHTML5) {
-            // Clear timeout
-            clearTimeout(this.timers.loading);
-
             // Restore native video controls
             ui.toggleNativeControls.call(this, true);
 
@@ -1113,7 +1155,7 @@ class Plyr {
 
     /**
      * Check for support for a mime type (HTML5 only)
-     * @param {string} type - Mime type
+     * @param {String} type - Mime type
      */
     supports(type) {
         return support.mime.call(this, type);
@@ -1121,9 +1163,9 @@ class Plyr {
 
     /**
      * Check for support
-     * @param {string} type - Player type (audio/video)
-     * @param {string} provider - Provider (html5/youtube/vimeo)
-     * @param {bool} inline - Where player has `playsinline` sttribute
+     * @param {String} type - Player type (audio/video)
+     * @param {String} provider - Provider (html5/youtube/vimeo)
+     * @param {Boolean} inline - Where player has `playsinline` sttribute
      */
     static supported(type, provider, inline) {
         return support.check(type, provider, inline);
@@ -1131,8 +1173,8 @@ class Plyr {
 
     /**
      * Load an SVG sprite into the page
-     * @param {string} url - URL for the SVG sprite
-     * @param {string} [id] - Unique ID
+     * @param {String} url - URL for the SVG sprite
+     * @param {String} [id] - Unique ID
      */
     static loadSprite(url, id) {
         return loadSprite(url, id);
@@ -1141,7 +1183,7 @@ class Plyr {
     /**
      * Setup multiple instances
      * @param {*} selector
-     * @param {object} options
+     * @param {Object} options
      */
     static setup(selector, options = {}) {
         let targets = null;
